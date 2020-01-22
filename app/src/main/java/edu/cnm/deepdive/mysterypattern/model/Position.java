@@ -22,7 +22,7 @@ public class Position {
     return y;
   }
 
-  protected void setY(double v) {
+  protected void setY(double y) {
     this.y = y;
   }
 

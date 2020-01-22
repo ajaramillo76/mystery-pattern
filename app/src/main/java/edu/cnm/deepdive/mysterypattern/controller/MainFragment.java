@@ -19,6 +19,8 @@ import edu.cnm.deepdive.mysterypattern.model.Terrain;
 import edu.cnm.deepdive.mysterypattern.view.PatternView;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class MainFragment extends Fragment implements View.OnTouchListener {
 
@@ -29,6 +31,8 @@ public class MainFragment extends Fragment implements View.OnTouchListener {
   private PatternView patternView;
   private Mode mode;
   private Terrain terrain;
+  private Timer refresh;
+  private Runner runner;
 
   @Override
   public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -66,38 +70,108 @@ public class MainFragment extends Fragment implements View.OnTouchListener {
 
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
-    return super.onOptionsItemSelected(item);
+    boolean handled = true;
+    switch (item.getItemId()) {
+      case R.id.play:
+        start();
+        getActivity().invalidateOptionsMenu();
+        break;
+      case R.id.pause:
+        stop();
+        break;
+      case R.id.reset:
+        patternView.reset();
+        break;
+      case R.id.build:
+        build();
+        getActivity().invalidateOptionsMenu();
+        break;
+      default:
+        handled = super.onOptionsItemSelected(item);
+    }
+    return handled;
+  }
+
+  private void stop() {
+    setMode(Mode.PAUSED);
+    runner = null;
+    refresh.cancel();
+    refresh = null;
+  }
+
+  private void start() {
+    setMode(Mode.JUMPING);
+    if (terrain == null) {
+      terrain = new Terrain(vertices, JUMP_FRACTION);
+      patternView.setTerrain(terrain);
+    }
+    refresh = new Timer();
+    refresh.schedule(new Refresher(), 50, 50);
+    runner = new Runner();
+    runner.start();
   }
 
   @Override
   public boolean onTouch(View v, MotionEvent event) {
-    // TODO Check mode.
-    if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-      vertices.add(new Position(event.getX(), event.getY()));
-      if (vertices.size() >= NUM_VERTICES) {
-        mode = Mode.READY;
-        getActivity().invalidateOptionsMenu();
-        while (vertices.size() > NUM_VERTICES) {
-          vertices.remove(0);
+    if (mode == Mode.BUILDING || mode == Mode.READY) {
+      if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+        vertices.add(new Position(event.getX(), event.getY()));
+        if (vertices.size() >= NUM_VERTICES) {
+          setMode(Mode.READY);
+          while (vertices.size() > NUM_VERTICES) {
+            vertices.remove(0);
+          }
         }
+        getActivity().invalidateOptionsMenu();
+        patternView.invalidate();
       }
-      // TODO Refresh options menu.
-      patternView.invalidate();
     }
     v.performClick();
     return false;
   }
 
   private void build() {
-    Toast.makeText(getContext(), "Click to place the vertices of a triangle", Toast.LENGTH_LONG).show();
-    mode = Mode.BUILDING;
+    Toast.makeText(getContext(), R.string.build_message, Toast.LENGTH_LONG).show();
+    setMode(Mode.BUILDING);
     vertices.clear();
-    // TODO Reset the patternView.
-    // TODO Reset the terrain.
+    patternView.reset();
+    terrain = null;
+  }
+
+  public void setMode(Mode mode) {
+    this.mode = mode;
+    patternView.setMode(mode);
   }
 
   public enum Mode {
     BUILDING, READY, JUMPING, PAUSED
   }
 
+  private class Runner extends Thread {
+
+    @Override
+    public void run() {
+      while (mode == Mode.JUMPING) {
+        for (int i = 0; i < 50; i++) {
+          terrain.update();
+          patternView.update();
+        }
+        try {
+          sleep(5);
+        } catch (InterruptedException expected) {
+          // Do nothing; get on with your life.
+        }
+      }
+      patternView.postInvalidate();
+      getActivity().invalidateOptionsMenu();
+    }
+  }
+
+  private class Refresher extends TimerTask {
+
+    @Override
+    public void run() {
+      patternView.postInvalidate();
+    }
+  }
 }
